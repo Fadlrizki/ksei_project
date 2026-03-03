@@ -443,4 +443,4 @@ else:
 
 # Footer
 st.divider()
-st.caption("Data dibaca dari folder `data/` - File CSV terbaru")
+st.caption("Data dibaca dari data KSEI terbaru")
