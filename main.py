@@ -16,9 +16,19 @@ st.set_page_config(
 # Title
 st.title("📊 KSEI Shareholder Dashboard ( >1% Ownership )")
 
-# Initialize session state untuk tab
+# Initialize session state
 if 'active_tab' not in st.session_state:
     st.session_state.active_tab = 0
+if 'selected_company' not in st.session_state:
+    st.session_state.selected_company = None
+if 'selected_investor' not in st.session_state:
+    st.session_state.selected_investor = None
+if 'filter_company' not in st.session_state:
+    st.session_state.filter_company = []
+if 'filter_type' not in st.session_state:
+    st.session_state.filter_type = []
+if 'min_percent_raw' not in st.session_state:
+    st.session_state.min_percent_raw = 0.0
 
 # Fungsi untuk mendapatkan file terbaru
 @st.cache_data(ttl=60)
@@ -102,7 +112,7 @@ with st.sidebar:
         
         # Filter options
         st.divider()
-        st.header("🔍 Filters")
+        st.header("🔍 Global Filters")
         
         # Search box
         search = st.text_input("Search Company/Investor", "", key="search_input")
@@ -117,13 +127,16 @@ with st.sidebar:
         else:
             selected_local = 'All'
         
+        st.divider()
+        st.caption("Filters berlaku untuk semua tab")
+        
     else:
         st.warning("Tidak ada file CSV di folder `data/`")
         st.info("Letakkan file CSV hasil konversi di folder `data/`")
 
 # Main content
 if df is not None and not df.empty:
-    # Apply filters
+    # Apply global filters
     filtered_df = df.copy()
     
     if search:
@@ -143,15 +156,14 @@ if df is not None and not df.empty:
         elif selected_local == 'Unknown':
             filtered_df = filtered_df[filtered_df['LOCAL_FOREIGN'].isna()]
     
-    # Tabs with session state
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "📈 Overview", 
-        "🏢 Per Company",
-        "👥 Per Investor",
-        "📋 Raw Data"
-    ])
+    # Tabs - menggunakan session_state untuk mengontrol tab aktif
+    tab_names = ["📈 Overview", "🏢 Per Company", "👥 Per Investor", "📋 Raw Data"]
     
-    with tab1:
+    # Buat tabs
+    tabs = st.tabs(tab_names)
+    
+    # Overview Tab
+    with tabs[0]:
         st.session_state.active_tab = 0
         st.header("Market Overview")
         
@@ -230,13 +242,30 @@ if df is not None and not df.empty:
             )
             st.plotly_chart(fig, use_container_width=True)
     
-    with tab2:
+    # Per Company Tab
+    with tabs[1]:
         st.session_state.active_tab = 1
         st.header("Per Company Analysis")
         
-        # Company selector
+        # Company selector dengan session state
         companies = sorted(filtered_df['SHARE_CODE'].unique())
-        selected_company = st.selectbox("Select Company", companies, key="company_select")
+        
+        # Gunakan nilai dari session state jika ada
+        if st.session_state.selected_company in companies:
+            default_company = st.session_state.selected_company
+        else:
+            default_company = companies[0] if companies else None
+            st.session_state.selected_company = default_company
+        
+        selected_company = st.selectbox(
+            "Select Company", 
+            companies, 
+            index=companies.index(default_company) if default_company in companies else 0,
+            key="company_select"
+        )
+        
+        # Update session state
+        st.session_state.selected_company = selected_company
         
         if selected_company:
             company_data = filtered_df[filtered_df['SHARE_CODE'] == selected_company].copy()
@@ -279,13 +308,30 @@ if df is not None and not df.empty:
             fig.update_layout(yaxis={'categoryorder':'total ascending'})
             st.plotly_chart(fig, use_container_width=True)
     
-    with tab3:
+    # Per Investor Tab
+    with tabs[2]:
         st.session_state.active_tab = 2
         st.header("Per Investor Analysis")
         
-        # Investor selector
+        # Investor selector dengan session state
         investors = sorted(filtered_df['INVESTOR_NAME'].unique())
-        selected_investor = st.selectbox("Select Investor", investors, key="investor_select")
+        
+        # Gunakan nilai dari session state jika ada
+        if st.session_state.selected_investor in investors:
+            default_investor = st.session_state.selected_investor
+        else:
+            default_investor = investors[0] if investors else None
+            st.session_state.selected_investor = default_investor
+        
+        selected_investor = st.selectbox(
+            "Select Investor", 
+            investors,
+            index=investors.index(default_investor) if default_investor in investors else 0,
+            key="investor_select"
+        )
+        
+        # Update session state
+        st.session_state.selected_investor = selected_investor
         
         if selected_investor:
             investor_data = filtered_df[filtered_df['INVESTOR_NAME'] == selected_investor].copy()
@@ -319,29 +365,42 @@ if df is not None and not df.empty:
                 )
                 st.plotly_chart(fig, use_container_width=True)
     
-    with tab4:
+    # Raw Data Tab
+    with tabs[3]:
         st.session_state.active_tab = 3
         st.header("Raw Data")
         
-        # Filters for raw data
+        # Filters for raw data dengan session state
         col1, col2, col3 = st.columns(3)
         with col1:
             filter_company = st.multiselect(
                 "Filter by Company",
                 options=sorted(filtered_df['SHARE_CODE'].unique()),
+                default=st.session_state.filter_company,
                 key="filter_company_multiselect"
             )
+            st.session_state.filter_company = filter_company
+        
         with col2:
             if 'LOCAL_FOREIGN' in filtered_df.columns:
                 filter_type = st.multiselect(
                     "Filter by Type",
                     options=filtered_df['LOCAL_FOREIGN'].dropna().unique(),
+                    default=st.session_state.filter_type,
                     key="filter_type_multiselect"
                 )
+                st.session_state.filter_type = filter_type
             else:
                 filter_type = []
+        
         with col3:
-            min_percent_raw = st.number_input("Min Percentage", 0.0, 100.0, 0.0, key="min_percent_raw_input")
+            min_percent_raw = st.number_input(
+                "Min Percentage", 
+                0.0, 100.0, 
+                value=st.session_state.min_percent_raw,
+                key="min_percent_raw_input"
+            )
+            st.session_state.min_percent_raw = min_percent_raw
         
         # Apply filters
         raw_df = filtered_df.copy()
