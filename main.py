@@ -44,6 +44,21 @@ st.markdown("""
         color: #DC2626;
         font-weight: bold;
     }
+    .dropdown-container {
+        background: white;
+        border-radius: 10px;
+        padding: 15px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+    .metric-container {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 15px;
+        padding: 20px;
+        color: white;
+        text-align: center;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -58,6 +73,10 @@ if 'selected_investor' not in st.session_state:
     st.session_state.selected_investor = None
 if 'view_mode' not in st.session_state:
     st.session_state.view_mode = "📅 Data Terkini"
+if 'search_company' not in st.session_state:
+    st.session_state.search_company = ""
+if 'search_investor' not in st.session_state:
+    st.session_state.search_investor = ""
 
 # Fungsi untuk mendapatkan semua file CSV
 @st.cache_data(ttl=60)
@@ -103,7 +122,7 @@ def load_data_file(filepath):
         df['PERCENTAGE'] = df['PERCENTAGE'].astype(str).str.replace('"', '').str.replace(',', '.').str.strip()
         df['PERCENTAGE'] = pd.to_numeric(df['PERCENTAGE'], errors='coerce')
         
-        # Filter >1% sesuai judul dashboard
+        # Filter >1%
         df = df[df['PERCENTAGE'] > 1]
         
         # Bersihkan string
@@ -123,7 +142,6 @@ def compare_datasets(df_old, df_new, old_date, new_date):
     df_old = df_old.copy()
     df_new = df_new.copy()
     
-    # Normalize untuk matching
     df_old['SHARE_CODE'] = df_old['SHARE_CODE'].str.upper().str.strip()
     df_old['INVESTOR_NAME'] = df_old['INVESTOR_NAME'].str.upper().str.strip()
     df_new['SHARE_CODE'] = df_new['SHARE_CODE'].str.upper().str.strip()
@@ -141,7 +159,6 @@ def compare_datasets(df_old, df_new, old_date, new_date):
     
     changes = []
     
-    # Data bertambah
     for key in added_keys:
         row = df_new[df_new['KEY'] == key].iloc[0]
         changes.append({
@@ -158,7 +175,6 @@ def compare_datasets(df_old, df_new, old_date, new_date):
             'LOCAL_FOREIGN': row.get('LOCAL_FOREIGN', '')
         })
     
-    # Data berkurang
     for key in removed_keys:
         row = df_old[df_old['KEY'] == key].iloc[0]
         changes.append({
@@ -175,7 +191,6 @@ def compare_datasets(df_old, df_new, old_date, new_date):
             'LOCAL_FOREIGN': row.get('LOCAL_FOREIGN', '')
         })
     
-    # Data berubah
     for key in common_keys:
         old_row = df_old[df_old['KEY'] == key].iloc[0]
         new_row = df_new[df_new['KEY'] == key].iloc[0]
@@ -184,7 +199,7 @@ def compare_datasets(df_old, df_new, old_date, new_date):
         new_pct = new_row['PERCENTAGE']
         change = new_pct - old_pct
         
-        if abs(change) > 0.01:  # Minimal perubahan 0.01%
+        if abs(change) > 0.01:
             changes.append({
                 'SHARE_CODE': old_row['SHARE_CODE'],
                 'ISSUER_NAME': old_row['ISSUER_NAME'],
@@ -211,31 +226,27 @@ with st.sidebar:
     st.image("https://img.icons8.com/color/96/000000/combo-chart--v1.png", width=80)
     st.markdown("## Menu Utama")
     
-    # Mode tampilan - pake key yang berbeda dan tidak pakai session state untuk value
     view_options = ["📅 Data Terkini", "🔄 Perubahan", "🏢 Perusahaan", "👥 Investor"]
     view_mode = st.radio(
         "Pilih Tampilan:",
         view_options,
         key="view_mode_radio",
-        index=0  # Selalu mulai dari index 0
+        index=0
     )
     
     st.divider()
     
     if all_files:
-        # Informasi file
         st.markdown("### 📁 Data Tersedia")
-        for i, (_, filename, date) in enumerate(all_files[:3]):  # Tampilkan 3 terbaru
+        for i, (_, filename, date) in enumerate(all_files[:3]):
             if i == 0:
                 st.success(f"📌 Terbaru: {date.strftime('%d-%b-%Y')}")
             else:
                 st.info(f"📅 {date.strftime('%d-%b-%Y')}")
         
-        # Load data terbaru
         df_latest = load_data_file(all_files[0][0])
         latest_date = all_files[0][2].strftime('%d-%b-%Y')
         
-        # Untuk mode perubahan, perlu 2 periode
         if len(all_files) >= 2:
             df_previous = load_data_file(all_files[1][0])
             previous_date = all_files[1][2].strftime('%d-%b-%Y')
@@ -243,70 +254,101 @@ with st.sidebar:
             df_previous = None
             previous_date = None
             
+        # Quick stats di sidebar
+        if df_latest is not None:
+            st.divider()
+            st.markdown("### 📊 Quick Stats")
+            st.metric("Total Perusahaan", df_latest['SHARE_CODE'].nunique())
+            st.metric("Total Investor", df_latest['INVESTOR_NAME'].nunique())
+            st.metric("Rata-rata %", f"{df_latest['PERCENTAGE'].mean():.2f}%")
     else:
         st.warning("Tidak ada file CSV di folder data/")
         df_latest = df_previous = None
         latest_date = previous_date = None
 
-# Main content berdasarkan mode
+# Main content
 if df_latest is not None:
     
     if view_mode == "📅 Data Terkini":
         # ==================== DATA TERKINI ====================
         st.markdown(f'<p class="sub-header">📅 Data Kepemilikan Saham >1% per {latest_date}</p>', unsafe_allow_html=True)
         
-        # Key Metrics
+        # Key Metrics dengan card yang lebih menarik
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            with st.container():
-                # st.markdown('<div class="card">', unsafe_allow_html=True)
-                st.metric("Total Perusahaan", df_latest['SHARE_CODE'].nunique())
-                st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown(f"""
+            <div class="metric-container">
+                <div style="font-size: 1rem; opacity: 0.9;">Total Perusahaan</div>
+                <div style="font-size: 2.5rem; font-weight: bold;">{df_latest['SHARE_CODE'].nunique():,}</div>
+            </div>
+            """, unsafe_allow_html=True)
         
         with col2:
-            with st.container():
-                # st.markdown('<div class="card">', unsafe_allow_html=True)
-                st.metric("Total Investor", df_latest['INVESTOR_NAME'].nunique())
-                st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown(f"""
+            <div class="metric-container">
+                <div style="font-size: 1rem; opacity: 0.9;">Total Investor</div>
+                <div style="font-size: 2.5rem; font-weight: bold;">{df_latest['INVESTOR_NAME'].nunique():,}</div>
+            </div>
+            """, unsafe_allow_html=True)
         
         with col3:
-            with st.container():
-                # st.markdown('<div class="card">', unsafe_allow_html=True)
-                avg_pct = df_latest['PERCENTAGE'].mean()
-                st.metric("Rata-rata Kepemilikan", f"{avg_pct:.2f}%")
-                st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown(f"""
+            <div class="metric-container">
+                <div style="font-size: 1rem; opacity: 0.9;">Rata-rata Kepemilikan</div>
+                <div style="font-size: 2.5rem; font-weight: bold;">{df_latest['PERCENTAGE'].mean():.2f}%</div>
+            </div>
+            """, unsafe_allow_html=True)
         
         with col4:
-            with st.container():
-                # st.markdown('<div class="card">', unsafe_allow_html=True)
-                total_pct = df_latest['PERCENTAGE'].sum()
-                st.metric("Total Kepemilikan", f"{total_pct:.2f}%")
-                st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown(f"""
+            <div class="metric-container">
+                <div style="font-size: 1rem; opacity: 0.9;">Total Kepemilikan</div>
+                <div style="font-size: 2.5rem; font-weight: bold;">{df_latest['PERCENTAGE'].sum():.2f}%</div>
+            </div>
+            """, unsafe_allow_html=True)
         
         st.divider()
         
-        # Search and Filter
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            search_term = st.text_input("🔍 Cari Perusahaan atau Investor", placeholder="Masukkan nama...", key="search_current")
-        with col2:
-            min_pct = st.slider("Minimal Kepemilikan %", 1.0, 100.0, 1.0, step=1.0, key="min_pct_current")
+        # Filter dengan dropdown untuk memudahkan pencarian
+        st.markdown('<p class="sub-header">🔍 Filter Data</p>', unsafe_allow_html=True)
         
-        # Filter data
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Dropdown untuk memilih perusahaan
+            all_companies = sorted(df_latest['SHARE_CODE'].unique())
+            company_options = ["Semua Perusahaan"] + all_companies
+            selected_company_filter = st.selectbox(
+                "Pilih Perusahaan:",
+                options=company_options,
+                key="company_filter"
+            )
+        
+        with col2:
+            # Dropdown untuk memilih investor
+            all_investors = sorted(df_latest['INVESTOR_NAME'].unique())
+            investor_options = ["Semua Investor"] + all_investors
+            selected_investor_filter = st.selectbox(
+                "Pilih Investor:",
+                options=investor_options,
+                key="investor_filter"
+            )
+        
+        # Filter berdasarkan pilihan
         display_df = df_latest.copy()
-        if search_term:
-            display_df = display_df[
-                display_df['SHARE_CODE'].str.contains(search_term.upper(), na=False) |
-                display_df['ISSUER_NAME'].str.contains(search_term.upper(), na=False) |
-                display_df['INVESTOR_NAME'].str.contains(search_term.upper(), na=False)
-            ]
-        display_df = display_df[display_df['PERCENTAGE'] >= min_pct]
+        
+        if selected_company_filter != "Semua Perusahaan":
+            display_df = display_df[display_df['SHARE_CODE'] == selected_company_filter]
+        
+        if selected_investor_filter != "Semua Investor":
+            display_df = display_df[display_df['INVESTOR_NAME'] == selected_investor_filter]
         
         # Tabs untuk data terkini
         tab1, tab2, tab3 = st.tabs(["📋 Semua Data", "🏢 Top Perusahaan", "👥 Top Investor"])
         
         with tab1:
+            st.subheader(f"Data ({len(display_df)} records)")
             st.dataframe(
                 display_df[['SHARE_CODE', 'ISSUER_NAME', 'INVESTOR_NAME', 'PERCENTAGE', 
                            'INVESTOR_TYPE', 'LOCAL_FOREIGN']].sort_values('PERCENTAGE', ascending=False),
@@ -314,17 +356,15 @@ if df_latest is not None:
                 height=500
             )
             
-            # Download button
             csv = display_df.to_csv(index=False).encode('utf-8')
             st.download_button(
-                "📥 Download Data Terkini",
+                "📥 Download Data",
                 csv,
                 f"ksei_data_{latest_date}.csv",
                 "text/csv"
             )
         
         with tab2:
-            # Top companies by total ownership
             top_companies = display_df.groupby(['SHARE_CODE', 'ISSUER_NAME']).agg({
                 'PERCENTAGE': ['sum', 'count', 'max']
             }).round(2)
@@ -334,7 +374,6 @@ if df_latest is not None:
             col1, col2 = st.columns(2)
             
             with col1:
-                st.subheader("Top 20 Perusahaan - Total Kepemilikan")
                 st.dataframe(top_companies[['SHARE_CODE', 'ISSUER_NAME', 'TOTAL_%', 'JUMLAH_INVESTOR']])
             
             with col2:
@@ -349,7 +388,6 @@ if df_latest is not None:
                 st.plotly_chart(fig, use_container_width=True)
         
         with tab3:
-            # Top investors
             top_investors = display_df.groupby(['INVESTOR_NAME']).agg({
                 'PERCENTAGE': ['sum', 'count', 'max'],
                 'SHARE_CODE': lambda x: ', '.join(x.head(3))
@@ -357,7 +395,6 @@ if df_latest is not None:
             top_investors.columns = ['TOTAL_%', 'JUMLAH_PERUSAHAAN', 'MAKS_%', 'SAMPLE_PERUSAHAAN']
             top_investors = top_investors.sort_values('TOTAL_%', ascending=False).head(20).reset_index()
             
-            st.subheader("Top 20 Investor - Total Kepemilikan")
             st.dataframe(top_investors)
     
     elif view_mode == "🔄 Perubahan":
@@ -365,7 +402,6 @@ if df_latest is not None:
         if df_previous is not None:
             st.markdown(f'<p class="sub-header">🔄 Perubahan Kepemilikan ({previous_date} → {latest_date})</p>', unsafe_allow_html=True)
             
-            # Hitung perubahan
             changes_df = compare_datasets(df_previous, df_latest, previous_date, latest_date)
             
             if not changes_df.empty:
@@ -389,36 +425,55 @@ if df_latest is not None:
                 
                 st.divider()
                 
-                # Filter
-                col1, col2, col3 = st.columns(3)
+                # Filter dengan dropdown
+                st.markdown("### 🔍 Filter Perubahan")
+                
+                col1, col2 = st.columns(2)
+                
                 with col1:
-                    type_filter = st.multiselect(
-                        "Tipe Perubahan",
-                        options=['BERTAMBAH', 'BERKURANG', 'BERUBAH'],
-                        default=['BERTAMBAH', 'BERKURANG', 'BERUBAH'],
-                        format_func=lambda x: {
-                            'BERTAMBAH': '➕ Bertambah',
-                            'BERKURANG': '➖ Berkurang',
-                            'BERUBAH': '🔄 Berubah'
-                        }[x],
-                        key="type_filter"
+                    # Dropdown untuk memilih perusahaan
+                    companies_in_changes = sorted(changes_df['SHARE_CODE'].unique())
+                    company_options = ["Semua Perusahaan"] + companies_in_changes
+                    selected_company_change = st.selectbox(
+                        "Pilih Perusahaan:",
+                        options=company_options,
+                        key="company_change_filter"
                     )
+                
                 with col2:
-                    min_change = st.number_input("Min Perubahan %", 0.0, 100.0, 0.1, key="min_change")
-                with col3:
-                    search_change = st.text_input("Cari Perusahaan/Investor", "", key="search_change")
+                    # Dropdown untuk memilih investor
+                    investors_in_changes = sorted(changes_df['INVESTOR_NAME'].unique())
+                    investor_options = ["Semua Investor"] + investors_in_changes
+                    selected_investor_change = st.selectbox(
+                        "Pilih Investor:",
+                        options=investor_options,
+                        key="investor_change_filter"
+                    )
+                
+                # Filter type
+                type_filter = st.multiselect(
+                    "Tipe Perubahan:",
+                    options=['BERTAMBAH', 'BERKURANG', 'BERUBAH'],
+                    default=['BERTAMBAH', 'BERKURANG', 'BERUBAH'],
+                    format_func=lambda x: {
+                        'BERTAMBAH': '➕ Bertambah',
+                        'BERKURANG': '➖ Berkurang',
+                        'BERUBAH': '🔄 Berubah'
+                    }[x],
+                    key="type_filter_change"
+                )
                 
                 # Apply filters
                 filtered_changes = changes_df.copy()
+                
+                if selected_company_change != "Semua Perusahaan":
+                    filtered_changes = filtered_changes[filtered_changes['SHARE_CODE'] == selected_company_change]
+                
+                if selected_investor_change != "Semua Investor":
+                    filtered_changes = filtered_changes[filtered_changes['INVESTOR_NAME'] == selected_investor_change]
+                
                 if type_filter:
                     filtered_changes = filtered_changes[filtered_changes['TYPE'].isin(type_filter)]
-                if min_change > 0:
-                    filtered_changes = filtered_changes[abs(filtered_changes['CHANGE_%']) >= min_change]
-                if search_change:
-                    filtered_changes = filtered_changes[
-                        filtered_changes['SHARE_CODE'].str.contains(search_change.upper(), na=False) |
-                        filtered_changes['INVESTOR_NAME'].str.contains(search_change.upper(), na=False)
-                    ]
                 
                 # Tabs untuk perubahan
                 tab1, tab2, tab3, tab4 = st.tabs(["📋 Semua", "➕ Bertambah", "➖ Berkurang", "🔄 Berubah"])
@@ -429,10 +484,9 @@ if df_latest is not None:
                         use_container_width=True
                     )
                     
-                    # Download
                     csv = filtered_changes.to_csv(index=False).encode('utf-8')
                     st.download_button(
-                        "📥 Download Data Perubahan",
+                        "📥 Download Data",
                         csv,
                         f"ksei_changes_{previous_date}_to_{latest_date}.csv",
                         "text/csv"
@@ -441,26 +495,16 @@ if df_latest is not None:
                 with tab2:
                     added_df = filtered_changes[filtered_changes['TYPE'] == 'BERTAMBAH']
                     if not added_df.empty:
-                        st.subheader("📈 Investor Baru yang Muncul")
                         st.dataframe(
                             added_df[['SHARE_CODE', 'ISSUER_NAME', 'INVESTOR_NAME', 'NEW_%', 'INVESTOR_TYPE']]
                             .sort_values('NEW_%', ascending=False)
                         )
-                        
-                        # Summary per perusahaan untuk yang bertambah
-                        added_by_company = added_df.groupby(['SHARE_CODE', 'ISSUER_NAME']).agg({
-                            'INVESTOR_NAME': 'count',
-                            'NEW_%': 'sum'
-                        }).rename(columns={'INVESTOR_NAME': 'JUMLAH_INVESTOR_BARU', 'NEW_%': 'TOTAL_%_BARU'})
-                        st.subheader("Ringkasan per Perusahaan - Investor Baru")
-                        st.dataframe(added_by_company.sort_values('TOTAL_%_BARU', ascending=False))
                     else:
                         st.info("Tidak ada investor baru")
                 
                 with tab3:
                     removed_df = filtered_changes[filtered_changes['TYPE'] == 'BERKURANG']
                     if not removed_df.empty:
-                        st.subheader("📉 Investor yang Keluar")
                         st.dataframe(
                             removed_df[['SHARE_CODE', 'ISSUER_NAME', 'INVESTOR_NAME', 'OLD_%', 'INVESTOR_TYPE']]
                             .sort_values('OLD_%', ascending=False)
@@ -471,20 +515,10 @@ if df_latest is not None:
                 with tab4:
                     changed_df = filtered_changes[filtered_changes['TYPE'] == 'BERUBAH']
                     if not changed_df.empty:
-                        st.subheader("🔄 Perubahan Persentase")
-                        
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            st.markdown("**📈 Naik**")
-                            naik = changed_df[changed_df['CHANGE_%'] > 0].sort_values('CHANGE_%', ascending=False)
-                            if not naik.empty:
-                                st.dataframe(naik[['SHARE_CODE', 'INVESTOR_NAME', 'OLD_%', 'NEW_%', 'CHANGE_%']])
-                        
-                        with col2:
-                            st.markdown("**📉 Turun**")
-                            turun = changed_df[changed_df['CHANGE_%'] < 0].sort_values('CHANGE_%')
-                            if not turun.empty:
-                                st.dataframe(turun[['SHARE_CODE', 'INVESTOR_NAME', 'OLD_%', 'NEW_%', 'CHANGE_%']])
+                        st.dataframe(
+                            changed_df[['SHARE_CODE', 'INVESTOR_NAME', 'OLD_%', 'NEW_%', 'CHANGE_%']]
+                            .sort_values('CHANGE_%', ascending=False)
+                        )
                     else:
                         st.info("Tidak ada perubahan persentase")
             
@@ -497,12 +531,15 @@ if df_latest is not None:
         # ==================== ANALISIS PERUSAHAAN ====================
         st.markdown('<p class="sub-header">🏢 Analisis Perusahaan</p>', unsafe_allow_html=True)
         
-        # Pilih perusahaan
+        # Dropdown untuk memilih perusahaan
         companies = sorted(df_latest['SHARE_CODE'].unique())
+        
+        # Tambahkan search box dengan selectbox
         selected_company = st.selectbox(
-            "Pilih Perusahaan",
-            companies,
-            key="company_analysis"
+            "🔍 Cari dan Pilih Perusahaan:",
+            options=companies,
+            key="company_select",
+            help="Ketik untuk mencari perusahaan"
         )
         
         if selected_company:
@@ -524,17 +561,28 @@ if df_latest is not None:
                 st.metric("Terbesar", f"{company_current['PERCENTAGE'].max():.2f}%")
             
             # Daftar investor
-            st.subheader(f"Daftar Investor >1% di {selected_company}")
+            st.subheader(f"Daftar Investor")
             st.dataframe(
                 company_current[['INVESTOR_NAME', 'PERCENTAGE', 'INVESTOR_TYPE', 'LOCAL_FOREIGN']]
                 .sort_values('PERCENTAGE', ascending=False)
             )
             
+            # Visualisasi
+            fig = px.bar(
+                company_current.head(15),
+                x='INVESTOR_NAME',
+                y='PERCENTAGE',
+                title=f"Top Investors - {selected_company}",
+                color='PERCENTAGE',
+                color_continuous_scale='Viridis'
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            
             # Jika ada data sebelumnya, tampilkan perubahan
             if df_previous is not None:
                 company_previous = df_previous[df_previous['SHARE_CODE'] == selected_company]
                 
-                st.subheader("Perubahan Kepemilikan")
+                st.subheader("🔄 Perubahan Kepemilikan")
                 
                 # Gabungkan untuk perbandingan
                 all_investors = set(company_previous['INVESTOR_NAME']) | set(company_current['INVESTOR_NAME'])
@@ -552,53 +600,34 @@ if df_latest is not None:
                     elif new_pct == 0:
                         status = "KELUAR"
                     else:
-                        if new_pct > old_pct:
-                            status = "NAIK"
-                        elif new_pct < old_pct:
-                            status = "TURUN"
-                        else:
-                            status = "TETAP"
+                        status = "✓"
                     
                     changes.append({
-                        'INVESTOR': investor,
-                        'STATUS': status,
+                        'Investor': investor,
+                        'Status': status,
                         f'{previous_date} (%)': round(old_pct, 2),
                         f'{latest_date} (%)': round(new_pct, 2),
-                        'PERUBAHAN': round(new_pct - old_pct, 2)
+                        'Perubahan': round(new_pct - old_pct, 2)
                     })
                 
                 changes_df = pd.DataFrame(changes)
-                changes_df = changes_df[changes_df['PERUBAHAN'] != 0]  # Hanya yang berubah
+                changes_df = changes_df[changes_df['Perubahan'] != 0]
                 
                 if not changes_df.empty:
-                    st.dataframe(changes_df.sort_values('PERUBAHAN', ascending=False))
-                    
-                    # Visualisasi
-                    fig = px.bar(
-                        changes_df,
-                        x='INVESTOR',
-                        y='PERUBAHAN',
-                        color='STATUS',
-                        title=f"Perubahan Kepemilikan - {selected_company}",
-                        color_discrete_map={
-                            'BARU': 'green',
-                            'NAIK': 'lightgreen',
-                            'TURUN': 'orange',
-                            'KELUAR': 'red'
-                        }
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.dataframe(changes_df.sort_values('Perubahan', ascending=False))
     
     elif view_mode == "👥 Investor":
         # ==================== PROFIL INVESTOR ====================
         st.markdown('<p class="sub-header">👥 Profil Investor</p>', unsafe_allow_html=True)
         
-        # Pilih investor
+        # Dropdown untuk memilih investor
         investors = sorted(df_latest['INVESTOR_NAME'].unique())
+        
         selected_investor = st.selectbox(
-            "Pilih Investor",
-            investors,
-            key="investor_profile"
+            "🔍 Cari dan Pilih Investor:",
+            options=investors,
+            key="investor_select",
+            help="Ketik untuk mencari investor"
         )
         
         if selected_investor:
@@ -619,7 +648,7 @@ if df_latest is not None:
             # Tipe investor
             if 'INVESTOR_TYPE' in investor_portfolio.columns:
                 tipe = investor_portfolio['INVESTOR_TYPE'].iloc[0]
-                st.info(f"Tipe Investor: {tipe}")
+                st.info(f"🏷️ Tipe Investor: {tipe}")
             
             # Portfolio
             st.subheader("📊 Portfolio Saat Ini")
@@ -629,71 +658,56 @@ if df_latest is not None:
             )
             
             # Visualisasi portfolio
-            fig = px.pie(
-                investor_portfolio,
-                values='PERCENTAGE',
-                names='SHARE_CODE',
-                title=f"Distribusi Portfolio - {selected_investor}"
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            if len(investor_portfolio) > 1:
+                fig = px.pie(
+                    investor_portfolio,
+                    values='PERCENTAGE',
+                    names='SHARE_CODE',
+                    title=f"Distribusi Portfolio - {selected_investor}"
+                )
+                st.plotly_chart(fig, use_container_width=True)
             
             # Perubahan portfolio jika ada data sebelumnya
             if df_previous is not None:
                 old_portfolio = df_previous[df_previous['INVESTOR_NAME'] == selected_investor]
                 
-                st.subheader("🔄 Perubahan Portfolio")
-                
-                # Gabungkan
-                all_companies = set(old_portfolio['SHARE_CODE']) | set(investor_portfolio['SHARE_CODE'])
-                
-                changes = []
-                for company in all_companies:
-                    old_data = old_portfolio[old_portfolio['SHARE_CODE'] == company]
-                    new_data = investor_portfolio[investor_portfolio['SHARE_CODE'] == company]
+                if not old_portfolio.empty:
+                    st.subheader("🔄 Perubahan Portfolio")
                     
-                    old_pct = old_data['PERCENTAGE'].iloc[0] if not old_data.empty else 0
-                    new_pct = new_data['PERCENTAGE'].iloc[0] if not new_data.empty else 0
+                    all_companies = set(old_portfolio['SHARE_CODE']) | set(investor_portfolio['SHARE_CODE'])
                     
-                    if old_pct == 0:
-                        aksi = "BELI BARU"
-                    elif new_pct == 0:
-                        aksi = "JUAL SEMUA"
-                    elif new_pct > old_pct:
-                        aksi = "TAMBAH"
-                    elif new_pct < old_pct:
-                        aksi = "KURANGI"
-                    else:
-                        aksi = "TETAP"
+                    changes = []
+                    for company in all_companies:
+                        old_data = old_portfolio[old_portfolio['SHARE_CODE'] == company]
+                        new_data = investor_portfolio[investor_portfolio['SHARE_CODE'] == company]
+                        
+                        old_pct = old_data['PERCENTAGE'].iloc[0] if not old_data.empty else 0
+                        new_pct = new_data['PERCENTAGE'].iloc[0] if not new_data.empty else 0
+                        
+                        if old_pct == 0:
+                            aksi = "BELI BARU"
+                        elif new_pct == 0:
+                            aksi = "JUAL SEMUA"
+                        elif new_pct > old_pct:
+                            aksi = "TAMBAH"
+                        elif new_pct < old_pct:
+                            aksi = "KURANGI"
+                        else:
+                            aksi = "TETAP"
+                        
+                        changes.append({
+                            'Perusahaan': company,
+                            'Aksi': aksi,
+                            f'{previous_date} (%)': round(old_pct, 2),
+                            f'{latest_date} (%)': round(new_pct, 2),
+                            'Perubahan': round(new_pct - old_pct, 2)
+                        })
                     
-                    changes.append({
-                        'PERUSAHAAN': company,
-                        'AKSI': aksi,
-                        f'{previous_date} (%)': round(old_pct, 2),
-                        f'{latest_date} (%)': round(new_pct, 2),
-                        'PERUBAHAN': round(new_pct - old_pct, 2)
-                    })
-                
-                changes_df = pd.DataFrame(changes)
-                changes_df = changes_df[changes_df['PERUBAHAN'] != 0]
-                
-                if not changes_df.empty:
-                    st.dataframe(changes_df.sort_values('PERUBAHAN', ascending=False))
+                    changes_df = pd.DataFrame(changes)
+                    changes_df = changes_df[changes_df['Perubahan'] != 0]
                     
-                    # Visualisasi
-                    fig = px.bar(
-                        changes_df,
-                        x='PERUSAHAAN',
-                        y='PERUBAHAN',
-                        color='AKSI',
-                        title=f"Aksi {selected_investor}",
-                        color_discrete_map={
-                            'BELI BARU': 'green',
-                            'TAMBAH': 'lightgreen',
-                            'KURANGI': 'orange',
-                            'JUAL SEMUA': 'red'
-                        }
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
+                    if not changes_df.empty:
+                        st.dataframe(changes_df.sort_values('Perubahan', ascending=False))
 
 else:
     st.warning("Tidak ada data yang bisa ditampilkan. Pastikan folder `data/` berisi file CSV.")
@@ -702,21 +716,15 @@ else:
     1. Buat folder **`data/`** di direktori yang sama
     2. Letakkan file CSV dengan format: **`YYYY-MM-DD.csv`**
     3. Contoh: `2026-03-10.csv`, `2026-03-03.csv`
-    
-    Dashboard akan menampilkan:
-    - 📅 **Data terkini** - Lihat kondisi terkini (>1%)
-    - 🔄 **Perubahan** - Tracking apa yang berubah antar periode
-    - 🏢 **Perusahaan** - Analisis mendalam per perusahaan
-    - 👥 **Investor** - Profil dan aktivitas per investor
     """)
 
 # Footer
 st.divider()
 col1, col2, col3 = st.columns(3)
 with col1:
-    st.caption("📊 KSEI Dashboard v3.1")
+    st.caption("📊 KSEI Dashboard v3.2")
 with col2:
     if all_files:
         st.caption(f"📅 Data terbaru: {all_files[0][2].strftime('%d-%b-%Y')}")
 with col3:
-    st.caption("🎯 Fokus kepemilikan >1%")
+    st.caption("🎯 Fokus kepemilikan >1% | 🔍 Dropdown Search")
