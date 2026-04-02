@@ -373,11 +373,11 @@ with col5:
 if prev_date and (not increased_vol.empty or not decreased_vol.empty):
     st.markdown('<div class="section-header">📈 Perubahan Volume Kepemilikan</div>', unsafe_allow_html=True)
     
-    tab_inc, tab_dec = st.tabs(["📈 Volume Naik (Top 15)", "📉 Volume Turun (Top 15)"])
+    tab_inc, tab_dec = st.tabs(["📈 Volume Naik (Top 30)", "📉 Volume Turun (Top 30)"])
     
     with tab_inc:
         if not increased_vol.empty:
-            display_inc = increased_vol.head(15)[['INVESTOR_NAME_CLEAN', 'SHARE_CODE', 
+            display_inc = increased_vol.head(30)[['INVESTOR_NAME_CLEAN', 'SHARE_CODE', 
                                                     'ISSUER_NAME_CLEAN_new', 'SHARES_CHANGE_M', 
                                                     'PCT_CHANGE', 'PERCENTAGE_new']]
             display_inc.columns = ['Investor', 'Kode Saham', 'Perusahaan', 'Perubahan (Juta)', 'Perubahan %', 'Posisi %']
@@ -406,7 +406,7 @@ if prev_date and (not increased_vol.empty or not decreased_vol.empty):
     
     with tab_dec:
         if not decreased_vol.empty:
-            display_dec = decreased_vol.head(15)[['INVESTOR_NAME_CLEAN', 'SHARE_CODE', 
+            display_dec = decreased_vol.head(30)[['INVESTOR_NAME_CLEAN', 'SHARE_CODE', 
                                                     'ISSUER_NAME_CLEAN_new', 'SHARES_CHANGE_M', 
                                                     'PCT_CHANGE', 'PERCENTAGE_new']]
             display_dec.columns = ['Investor', 'Kode Saham', 'Perusahaan', 'Perubahan (Juta)', 'Perubahan %', 'Posisi %']
@@ -705,7 +705,7 @@ if selected_company:
     )
     
     # Chart
-    fig = px.bar(company_data.head(15), x='INVESTOR_NAME_CLEAN', y='PERCENTAGE',
+    fig = px.bar(company_data.head(30), x='INVESTOR_NAME_CLEAN', y='PERCENTAGE',
                  title=f"Top Investor di {selected_company}", color='PERCENTAGE',
                  color_continuous_scale='Viridis', text='PERCENTAGE')
     fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
